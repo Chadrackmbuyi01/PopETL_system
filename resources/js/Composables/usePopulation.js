@@ -4,17 +4,21 @@ import axios from "axios";
 // Axios instances with base config
 const api = axios.create({
     baseURL: "/api",
+    timeout: 30000, // Increase timeout to 30s for slow API responses
     headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
     },
 });
 
-// Global interception: attach CRSF token for POST requests
+// Remove CSRF interceptor for stateless API routes to avoid issues
+// Global interception: attach CSRF token only if needed
 api.interceptors.request.use((config) => {
-    const token = document.head.querySelector('meta[name="csrf-token"]');
-    if (token) config.headers["X-CSRF-TOKEN"] = token.content;
-
+    // Only attach for non-GET if we're on the same origin
+    if (config.method !== "get") {
+        const token = document.head.querySelector('meta[name="csrf-token"]');
+        if (token) config.headers["X-CSRF-TOKEN"] = token.content;
+    }
     return config;
 });
 
@@ -61,7 +65,7 @@ export function usePopulation() {
             };
         } catch (err) {
             setFlash(
-                "Failed to load records. Please reflresh and try again.",
+                "Failed to load records. Please refresh and try again.",
                 "error",
             );
         } finally {
@@ -94,24 +98,47 @@ export function usePopulation() {
                 payload,
             );
 
-            setFlash(data.message, status === 200 ? "success" : "warning");
+            // Use success color for any 2xx status (like 201 Created)
+            setFlash(
+                data.message || "Data fetched successfully.",
+                status >= 200 && status < 300 ? "success" : "warning",
+            );
+
+            // Sequential reloads with a small delay to prevent php artisan serve concurrency issues
             await loadRecords();
+            await new Promise((r) => setTimeout(r, 100));
             await loadCountries();
 
             return { success: true, data };
         } catch (err) {
-            if (err.response?.status === 422) {
-                // Laravel validation errors
-                errors.value = err.response.data.errors ?? {};
-                setFlash("Please fix the validation errors below.", "error");
-            } else if (err.response?.status === 404) {
-                setFlash(err.response.data.message, "warning");
-            } else {
+            // Handle different types of errors (validation, not found, or generic)
+            if (err.response) {
+                if (err.response.status === 422) {
+                    errors.value = err.response.data.errors ?? {};
+                    setFlash(
+                        "Please fix the validation errors below.",
+                        "error",
+                    );
+                } else if (err.response.status === 404) {
+                    setFlash(
+                        err.response.data?.message || "Resource not found.",
+                        "warning",
+                    );
+                } else {
+                    setFlash(
+                        err.response.data?.message ||
+                            `Server error (${err.response.status}). Please try again.`,
+                        "error",
+                    );
+                }
+            } else if (err.request) {
+                // Request was made but no response received (Network error/Timeout)
                 setFlash(
-                    err.response?.data?.message ??
-                        "An unexpected error occurred. Please try again.",
+                    "Network error: The server took too long to respond or is unreachable. Please refresh.",
                     "error",
                 );
+            } else {
+                setFlash("An error occurred. Please try again.", "error");
             }
             return { success: false };
         } finally {

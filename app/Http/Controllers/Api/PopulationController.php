@@ -8,6 +8,7 @@ use App\Models\PopulationRecord;
 use App\Services\PopulationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class PopulationController extends Controller
@@ -58,13 +59,19 @@ class PopulationController extends Controller
             return response()->json([
                 'message' => "Successfully fetched and saved {$result['stored']} record(s) for '{$country}'.",
                 'stored'  => $result['stored'],
-                'records' => $result['records']->values(),
-            ], 201);
+            ], 200);
 
         } catch (RuntimeException $e) {
+            Log::error("ETL error: " . $e->getMessage());
             return response()->json([
-                'message' => 'ETL pipeline failed: ' . $e->getMessage(),
+                'message' => 'The data source could not be reached. ' . $e->getMessage(),
             ], 502);
+        } catch (\Exception $e) {
+            Log::error("General fetch error: " . $e->getMessage());
+            return response()->json([
+                'message' => 'An internal error occurred. Please try again.',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 

@@ -57,4 +57,15 @@ class PopulationRecord extends Model
     {
         return $query->whereRaw('LOWER(country) = ?', [strtolower($country)]);
     }
+
+    /**
+     * Get a distinct list of countries currently in the database.
+     */
+    public static function getUniqueCountries()
+    {
+        return self::select('country')
+            ->distinct()
+            ->orderBy('country')
+            ->pluck('country');
+    }
 }

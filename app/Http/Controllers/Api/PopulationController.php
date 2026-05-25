@@ -81,12 +81,7 @@ class PopulationController extends Controller
      */
     public function countries(): JsonResponse
     {
-        $countries = PopulationRecord::select('country')
-            ->distinct()
-            ->orderBy('country')
-            ->pluck('country');
-
-        return response()->json($countries);
+        return response()->json(PopulationRecord::getUniqueCountries());
     }
 
     /**
